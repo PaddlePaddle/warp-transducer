@@ -4,11 +4,13 @@
 #include <torch/extension.h>
 #include "rnnt.h"
 
+#define WARPRNNT_ENABLE_GPU // for read code
+
 #ifdef WARPRNNT_ENABLE_GPU
     #include "c10/cuda/CUDACachingAllocator.h"
 #endif
 
-int cpu_rnnt(torch::Tensor acts,
+int cpu_rnnt(torch::Tensor acts, //[B,T,U,D]
             torch::Tensor labels,
             torch::Tensor input_lengths,
             torch::Tensor label_lengths,

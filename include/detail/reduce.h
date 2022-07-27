@@ -17,7 +17,7 @@ struct CTAReduce {
         s[tid] = x;
         __syncthreads();
 
-        // Fold the data in half with each pass.
+        // Fold the data in half with each pass. gather from shared mem into warp.
 #pragma unroll
         for(int offset = NT / 2; offset >= warp_size; offset /= 2) {
             if(tid + offset < count && tid < offset) {
@@ -28,6 +28,7 @@ struct CTAReduce {
             __syncthreads();
         }
 
+        // gather in warp.
         T shuff;
         for (int offset = warp_size / 2; offset > 0; offset /= 2) {
 #if CUDART_VERSION < 9000
@@ -42,24 +43,28 @@ struct CTAReduce {
     }
 };
 
+// num_rows = len of row = cols, num_cols = len of col = rows
+// reduce_max(acts, denom, num_rows=alphabet_size_, num_cols=minibatch_ * maxT_ * maxU_, 0 stream_);
 template <int NT, typename Iop, typename Rop, typename T>
 __global__ void reduce_rows(Iop f, Rop g, const T* const acts, T* output, int num_rows) {
 
     typedef CTAReduce<NT, T, Rop> R;
-    __shared__ typename R::Storage storage;
+    __shared__ typename R::Storage storage; // storage size = NT = blockDim.x
 
-    int tid = threadIdx.x;
-    int idx = tid;
-    int col = blockIdx.x;
+    int tid = threadIdx.x; // blockDim.x = NT, work on axis which size is `alphabet_size_`
+    int idx = tid; // 0 <= tid < NT
+    int col = blockIdx.x; //  gridDim.x = minibatch_ * maxT_ * maxU_, col=row_idx
     T curr;
 
-    // Each block works on a column
+    // Each block works on a column, gather idx val with  NT stride
     if (idx < num_rows) {
+        // f=identity, num_rows = cols
         curr = f(acts[col * num_rows + idx]);
     }
     idx += NT;
 
     while (idx < num_rows) {
+        // g=max
         curr = g(curr, f(acts[col * num_rows + idx]));
         idx += NT;
     }
@@ -72,6 +77,7 @@ __global__ void reduce_rows(Iop f, Rop g, const T* const acts, T* output, int nu
         output[col] = curr;
 }
 
+// reduce_exp(acts, denom, alphabet_size_, minibatch_ * maxT_ * maxU_, 1, stream_);
 template <int NT, typename Iop, typename Rop, typename T>
 __global__ void reduce_minus(Iop f, Rop g, const T* const acts, T* output, int num_rows) {
 
@@ -86,11 +92,13 @@ __global__ void reduce_minus(Iop f, Rop g, const T* const acts, T* output, int n
 
     // Each block works on a column
     if (idx < num_rows) {
+        // f = exp
         curr = f(acts[col * num_rows + idx] - max);
     }
     idx += NT;
 
     while (idx < num_rows) {
+        // g = sum
         curr = g(curr, f(acts[col * num_rows + idx] - max));
         idx += NT;
     }
@@ -135,6 +143,8 @@ rnntStatus_t reduce(Iof f, Rof g, const T* const acts, T* output, int rows, int 
     return RNNT_STATUS_SUCCESS;
 }
 
+// reduce_max(acts, denom, alphabet_size_, minibatch_ * maxT_ * maxU_, 0, stream_);
+// reduce_exp(acts, denom, alphabet_size_, minibatch_ * maxT_ * maxU_, 1, stream_);
 template<typename T>
 rnntStatus_t reduce_exp(const T* const acts, T *denom, int rows, int cols, bool minus, cudaStream_t stream) {
     return reduce(rnnt_helper::exponential<T>(), rnnt_helper::add<T>(), acts, denom, rows, cols, minus, stream);

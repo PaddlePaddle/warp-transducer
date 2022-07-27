@@ -67,9 +67,9 @@ private:
     public:
         CpuRNNT_metadata(int T, int U, void* workspace, size_t bytes_used, int blank, 
                     const int* const labels, const ProbT* const log_probs, CpuRNNT_index& idx);
-        ProbT* alphas;
-        ProbT* betas;
-        ProbT* log_probs2; // only store blank & label
+        ProbT* alphas; // [T,U]
+        ProbT* betas; // [T,U]
+        ProbT* log_probs2; // only store blank & label, [T,U,2]
 
     private:
         void setup_probs(int T, int U, const int* const labels, int blank, 
@@ -120,7 +120,7 @@ CpuRNNT<ProbT>::CpuRNNT_metadata::setup_probs(int T, int U, const int* const lab
 
     for (int t = 0; t < T; ++t) {
         for (int u = 0; u < U; ++u) {
-            int offset = (t * U + u) * 2;
+            int offset = (t * U + u) * 2; //[T,U]
             log_probs2[offset] = log_probs[idx(t, u, blank)];
             // labels do not have first blank
             if (u < U-1) log_probs2[offset + 1] = log_probs[idx(t, u, labels[u])];
@@ -176,10 +176,10 @@ CpuRNNT<ProbT>::cost_and_grad_kernel(const ProbT* const log_probs, ProbT* grad,
 template<typename ProbT>
 ProbT
 CpuRNNT<ProbT>::compute_alphas(const ProbT* const log_probs, int T, int U, ProbT* alphas) {
-
+    // U real label len
     CpuRNNT_index idx(U, maxU_, minibatch_, alphabet_size_, batch_first);
 
-    alphas[0] = 0;
+    alphas[0] = 0; // log(1) = 0
 
     for (int t = 0; t < T; ++t) {
         for (int u = 0; u < U; ++u) {

@@ -91,7 +91,7 @@ GpuRNNT<ProbT>::compute_cost_and_score(const ProbT* const acts,
     
     bool training = (grads != nullptr);
     size_t bytes_used = 0;
-    // denom
+    // denom [B,T,U,1]
     ProbT* denom = reinterpret_cast<ProbT*>(static_cast<char*>(gpu_workspace) + bytes_used);
     bytes_used += sizeof(ProbT) * maxT_ * maxU_ * minibatch_;
     // alphas & betas

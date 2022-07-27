@@ -11,10 +11,10 @@ class _RNNT(Function):
     @staticmethod
     def forward(ctx, acts, labels, act_lens, label_lens, blank, reduction, fastemit_lambda):
         """
-        acts: Tensor of (batch x seqLength x labelLength x outputDim) containing output from network
-        labels: 2 dimensional Tensor containing all the targets of the batch with zero padded
-        act_lens: Tensor of size (batch) containing size of each output sequence from the network
-        label_lens: Tensor of (batch) containing label length of each example
+        acts: Tensor of (batch x seqLength x labelLength x outputDim) containing output from network,[B,Tmax,Umax,D]
+        labels: 2 dimensional Tensor containing all the targets of the batch with zero padded, [B,Umax]
+        act_lens: Tensor of size (batch) containing size of each output sequence from the network, [B]
+        label_lens: Tensor of (batch) containing label length of each example, [B]
         fastemit_lambda: Regularization parameter for FastEmit (https://arxiv.org/pdf/2010.11148.pdf)
         """
         is_cuda = acts.is_cuda
@@ -22,9 +22,9 @@ class _RNNT(Function):
         certify_inputs(acts, labels, act_lens, label_lens)
 
         loss_func = warp_rnnt.gpu_rnnt if is_cuda else warp_rnnt.cpu_rnnt
-        grads = torch.zeros_like(acts) if acts.requires_grad else torch.zeros(0).to(acts)
+        grads = torch.zeros_like(acts) if acts.requires_grad else torch.zeros(0).to(acts) #[B,T,U,D]
         minibatch_size = acts.size(0)
-        costs = torch.zeros(minibatch_size, dtype=acts.dtype)
+        costs = torch.zeros(minibatch_size, dtype=acts.dtype) #[B]
         loss_func(acts,
                   labels,
                   act_lens,
@@ -91,10 +91,10 @@ class RNNTLoss(Module):
 
     def forward(self, acts, labels, act_lens, label_lens):
         """
-        acts: Tensor of (batch x seqLength x labelLength x outputDim) containing output from network
-        labels: 2 dimensional Tensor containing all the targets of the batch with zero padded
-        act_lens: Tensor of size (batch) containing size of each output sequence from the network
-        label_lens: Tensor of (batch) containing label length of each example
+        acts: Tensor of (batch x seqLength x labelLength x outputDim) containing output from network, logits, [B,Tmax,Umax,D]
+        labels: 2 dimensional Tensor containing all the targets of the batch with zero padded, [B,Umax]
+        act_lens: Tensor of size (batch) containing size of each output sequence from the network, [B]
+        label_lens: Tensor of (batch) containing label length of each example, [B]
         """
         if not acts.is_cuda:
             # NOTE manually done log_softmax for CPU version,

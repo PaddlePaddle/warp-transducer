@@ -3,9 +3,15 @@
 #include "rnnt_helper.h"
 
 template<typename T>
-inline __device__ T logp(const T* const denom, const T* const acts, const int maxT, const int maxU, const int alphabet_size, int mb, int t, int u, int v) {
+inline __device__ T logp(const T* const denom, const T* const acts, 
+    const int maxT, const int maxU, const int alphabet_size, int mb, int t, int u, int v) {
+    // acts shape is [B,T,U,D]
+    // mb is B index, t is T idx, u is U idx, v is D idx
     const int col = (mb * maxT + t) * maxU + u;
-    return denom[col] + acts[col * alphabet_size + v];
+    // compute logsoftmax
+    // denom = -max - log(sum(exp(x-max)))
+    // acts = x
+    return acts[col * alphabet_size + v] + denom[col];
 }
 
 template<typename Tp>
@@ -16,10 +22,10 @@ __global__ void compute_alphas_kernel(const Tp* const acts, const Tp* const deno
     int u = threadIdx.x; // label id, u
     const int T = xlen[b];
     const int U = ylen[b] + 1;
-    const int* labels = mlabels + b * (maxU - 1); // mb label start point
+    const int* labels = mlabels + b * (maxU - 1); // mb(minibatch) label start point, [B,Umax-1]
     const int offset = b * maxT * maxU;
-    alphas += offset;
-    if (u == 0) alphas[0] = 0;
+    alphas += offset; //[B,T,Umax], logprob
+    if (u == 0) alphas[0] = 0; //t=0,u=0
 
     __syncthreads();
     for (int n = 1; n < T+U-1; ++n) {
@@ -49,7 +55,7 @@ __global__ void compute_alphas_kernel(const Tp* const acts, const Tp* const deno
 template<typename Tp>
 __global__ void compute_alphas_kernel_naive(const Tp* const acts, const Tp* const denom, Tp* alphas, Tp* llForward, const int* const xlen, const int* const ylen, 
     const int* const mlabels, const int minibatch, const int maxT, const int maxU, const int alphabet_size, const int blank_) {
-    int tid = threadIdx.x; // mb
+    int tid = threadIdx.x; // mb=minibatch
     const int T = xlen[tid];
     const int U = ylen[tid] + 1;
     const int* labels = mlabels + tid * (maxU - 1); // mb label start point
