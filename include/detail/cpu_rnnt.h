@@ -270,6 +270,21 @@ CpuRNNT<ProbT>::compute_betas_and_grad(ProbT* grad, const ProbT* const log_probs
     // gradient to the last blank transition
     grad[idx(T-1, U-1, blank_)] = -std::exp(log_probs[idx(T-1, U-1) * 2] + alphas[idx(T-1, U-1)] - loglike);
 
+#ifdef DEBUG_KERNEL
+    printf("cpu grad:\n");
+    for (int t = 0; t < maxT_; t++) {
+        for (int u = 0; u < maxU_; u++) {
+            for (int l = 0; l < 2; l++){
+                 int idx = ((t * maxU_) + u) * 2 + l;
+                 printf("%.4f ", grad[idx]);
+            }
+            printf("\n");
+        }
+        printf("\n");
+    }
+    printf("\n");
+#endif
+
     return loglike;
 }
 

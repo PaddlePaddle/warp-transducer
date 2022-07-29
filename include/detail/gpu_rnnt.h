@@ -212,6 +212,27 @@ GpuRNNT<ProbT>::compute_cost_and_score(const ProbT* const acts,
         elapsed = end - start;
         std::cout << "DEBUG: compute_grad_kernel " << elapsed.count() * 1000 << " ms\n";
 #endif
+
+#if defined(DEBUG_KERNEL)
+    ProbT* cpu_grad = new ProbT[minibatch_ * maxT_ * maxU_ * alphabet_size_]; 
+    cudaMemcpy(cpu_grad, grads, sizeof(ProbT) * minibatch_ * maxT_ * maxU_ * alphabet_size_, cudaMemcpyDeviceToHost);
+    //int* cpu_label = new int[minibatch_, maxU_];
+    //cudaMemcpy(cpu_label, labels, sizeof(int) * minibatch_ * maxU_, cudaMemcpyDeviceToHost);
+    printf("gpu grads\n");
+    for (int b = 0; b < minibatch_; b++) {
+        for (int t = 0; t < maxT_; t++) {
+            for (int u = 0; u < maxU_; u++) {
+                for (int v = 0; v < alphabet_size_; ++v){
+                    int idx = ((b * maxT_ + t) * maxU_ + u) * alphabet_size_ + v;
+                    printf("%.4f ", cpu_grad[idx]);
+                }
+                printf("\n");
+            }
+            printf("\n");
+        }
+        printf("\n");
+    }
+#endif
     }
     // cost
     cudaMemcpyAsync(costs, llForward, sizeof(ProbT) * minibatch_, cudaMemcpyDeviceToHost, stream_);
