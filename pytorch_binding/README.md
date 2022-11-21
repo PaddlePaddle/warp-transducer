@@ -2,6 +2,10 @@
 
 This package provides PyTorch kernels that wrap the WarpRNNT library. 
 
+```python
+pip install torch==1.11.0
+```
+
 ## Installation
 
 Install [PyTorch](https://github.com/pytorch/pytorch#installation).
