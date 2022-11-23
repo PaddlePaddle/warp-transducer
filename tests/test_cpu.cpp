@@ -282,6 +282,7 @@ float numeric_grad(std::vector<float>& acts, std::vector<int>& flat_labels, std:
         acts[i] += epsilon;
         num_grad[i] = (costP1 - costP2) / (2 * epsilon);
     }
+    return 0.0;
 }
 
 bool grad_check(int T, int L, int alphabet_size,
