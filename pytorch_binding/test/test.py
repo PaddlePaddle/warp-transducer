@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser(description='MXNet RNN Transducer Test.')
 parser.add_argument('--np', default=False, action='store_true', help='numpy loss')
 args = parser.parse_args()
 
-fn = rnntloss() if args.np else RNNTLoss(reduction='sum')
+fn = rnntloss(fastemit_lambda=0.0, reduction='sum') if args.np else RNNTLoss(reduction='sum', fastemit_lambda=0.0)
 
 gpu = 1
 def wrap_and_call(acts, labels):
@@ -162,8 +162,8 @@ def big_test():
 
 if __name__ == "__main__":
     use_cuda = False
-    small_test()
     big_test()
+    small_test()
     print("CPU Tests passed!")
     if torch.cuda.is_available():
         use_cuda = True
