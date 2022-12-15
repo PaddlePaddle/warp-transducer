@@ -11,7 +11,7 @@ IF (NOT APPLE)
 ENDIF()
 
 IF (APPLE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O2")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O2")
     add_definitions(-DAPPLE)
 ENDIF()
 
@@ -75,7 +75,7 @@ IF (CUDA_VERSION GREATER 11.0)
 ENDIF()
 
 if (NOT APPLE)
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --std=c++11")
+    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --std=c++14")
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS}")
 ENDIF()
 
@@ -108,17 +108,17 @@ IF (WITH_GPU)
 
     cuda_add_executable(test_time_gpu tests/test_time.cu tests/random.cpp )
     TARGET_LINK_LIBRARIES(test_time_gpu warprnnt ${CUDA_curand_LIBRARY})
-    SET_TARGET_PROPERTIES(test_time_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11")
+    SET_TARGET_PROPERTIES(test_time_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
 
     cuda_add_executable(test_gpu tests/test_gpu.cu tests/random.cpp )
     TARGET_LINK_LIBRARIES(test_gpu warprnnt ${CUDA_curand_LIBRARY})
-    SET_TARGET_PROPERTIES(test_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11")
+    SET_TARGET_PROPERTIES(test_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
 
 ELSE()
     MESSAGE(STATUS "Building shared library with no GPU support")
 
     if (NOT APPLE)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O2")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O2")
     ENDIF()
 
     ADD_LIBRARY(warprnnt SHARED src/rnnt_entrypoint.cpp)
@@ -128,11 +128,11 @@ ENDIF()
 
 add_executable(test_cpu tests/test_cpu.cpp tests/random.cpp )
 TARGET_LINK_LIBRARIES(test_cpu warprnnt)
-SET_TARGET_PROPERTIES(test_cpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11")
+SET_TARGET_PROPERTIES(test_cpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
 
 add_executable(test_time tests/test_time.cpp tests/random.cpp )
 TARGET_LINK_LIBRARIES(test_time warprnnt)
-SET_TARGET_PROPERTIES(test_time PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11")
+SET_TARGET_PROPERTIES(test_time PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
 
 INSTALL(TARGETS warprnnt
         RUNTIME DESTINATION "bin"

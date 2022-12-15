@@ -7,4 +7,4 @@ export C_INCLUDE_PATH="/usr/local/cuda/include"
 export CPLUS_INCLUDE_PATH="/usr/local/cuda/include"
 
 #python setup.py install
-pip install -e 
+pip install -e  .

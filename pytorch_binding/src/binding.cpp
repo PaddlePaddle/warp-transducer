@@ -20,13 +20,6 @@ int cpu_rnnt(torch::Tensor acts, //[B,T,U,D]
             float fastemit_lambda,
             int num_threads) {
 
-    std::cout << "acts: " << acts;
-    std::cout << "labels: " << labels;
-    std::cout << "input_lengths: " << input_lengths;
-    std::cout << "labels_lengths: " << label_lengths;
-    std::cout << "blank: : " << blank_label;
-    std::cout << "fastemit_lambda: : " << fastemit_lambda;
-    std::cout << "num threads: : " <<  num_threads;
     int maxT = acts.size(0);
     int maxU = acts.size(1);
     int minibatch_size = acts.size(2);
