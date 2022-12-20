@@ -25,7 +25,7 @@
 extern "C" {
 #endif
 
-#ifdef PADDLE_WITH_HIP
+#ifdef WARPRNNT_WITH_HIP
 // forward declare of HIP typedef to avoid needing to pull in HIP headers
 typedef struct ihipStream_t* GPUstream;
 #else
