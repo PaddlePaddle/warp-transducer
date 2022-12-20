@@ -4,6 +4,8 @@ ELSE()
     cmake_minimum_required(VERSION 2.8)
 ENDIF()
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 project(rnnt_release)
 
 IF (NOT APPLE)
@@ -35,6 +37,45 @@ endif()
 
 option(WITH_GPU "compile warp-rnnt with cuda." ${CUDA_FOUND})
 option(WITH_OMP "compile warp-rnnt with openmp." ON)
+option(BUILD_TESTS  "build warp-rnnt unit tests."      ON)
+option(BUILD_SHARED "build warp-rnnt shared library."  ON)
+option(WITH_ROCM   "Compile PaddlePaddle with ROCM platform" OFF)
+
+if(WITH_ROCM)
+    add_definitions(-DWARPCTC_WITH_HIP)
+    include(hip)
+endif(WITH_ROCM)
+
+if(BUILD_SHARED)
+    set(WARPRNNT_SHARED "SHARED")
+else()
+    set(WARPRNNT_SHARED "STATIC")
+endif()
+
+
+if(WIN32)
+    set(CMAKE_STATIC_LIBRARY_PREFIX lib)
+    set(CMAKE_C_FLAGS_DEBUG   "${CMAKE_C_FLAGS_DEBUG} /bigobj /MTd")
+    set(CMAKE_C_FLAGS_RELEASE  "${CMAKE_C_FLAGS_RELEASE} /bigobj /MT")
+    set(CMAKE_CXX_FLAGS_DEBUG  "${CMAKE_CXX_FLAGS_DEBUG} /bigobj /MTd")
+    set(CMAKE_CXX_FLAGS_RELEASE   "${CMAKE_CXX_FLAGS_RELEASE} /bigobj /MT")
+    foreach(flag_var
+            CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE)
+        if(${flag_var} MATCHES "/MD")
+            string(REGEX REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
+        endif(${flag_var} MATCHES "/MD")
+    endforeach(flag_var)
+else()
+    # Set c++ flags
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
+    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -O2")
+endif()
+
+if(APPLE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
+    add_definitions(-DAPPLE)
+endif()
+
 
 if(NOT WITH_OMP)
     add_definitions(-DRNNT_DISABLE_OMP)
@@ -44,8 +85,9 @@ if (WITH_OMP)
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Xcompiler -fopenmp")
 endif()
 
+
 IF(NOT (CUDA_VERSION GREATER 10.2))
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_30,code=sm_30 -O2")
+    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_30,code=sm_30")
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_35,code=sm_35")
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_50,code=sm_50")
 ENDIF()
@@ -74,11 +116,11 @@ IF (CUDA_VERSION GREATER 11.0)
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_86,code=sm_86")
 ENDIF()
 
+
 if (NOT APPLE)
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --std=c++14")
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS}")
 ENDIF()
-
 
 IF (APPLE)
     EXEC_PROGRAM(uname ARGS -v  OUTPUT_VARIABLE DARWIN_VERSION)
@@ -98,21 +140,26 @@ ENDIF()
 
 
 IF (WITH_GPU)
-
     MESSAGE(STATUS "Building shared library with GPU support")
 
-    CUDA_ADD_LIBRARY(warprnnt SHARED src/rnnt_entrypoint.cu)
+    if (WIN32)
+        SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Xcompiler \"/wd 4068 /wd 4244 /wd 4267 /wd 4305 /wd 4819\"")
+    endif()
+
+    CUDA_ADD_LIBRARY(warprnnt ${WARPRNNT_SHARED} src/rnnt_entrypoint.cu)
     IF (!Torch_FOUND)
         TARGET_LINK_LIBRARIES(warprnnt ${CUDA_curand_LIBRARY})
     ENDIF()
 
-    cuda_add_executable(test_time_gpu tests/test_time.cu)
-    TARGET_LINK_LIBRARIES(test_time_gpu warprnnt ${CUDA_curand_LIBRARY})
-    SET_TARGET_PROPERTIES(test_time_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
+    if(BUILD_TESTS)
+        cuda_add_executable(test_time_gpu tests/test_time.cu)
+        TARGET_LINK_LIBRARIES(test_time_gpu warprnnt ${CUDA_curand_LIBRARY})
+        SET_TARGET_PROPERTIES(test_time_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
 
-    cuda_add_executable(test_gpu tests/test_gpu.cu)
-    TARGET_LINK_LIBRARIES(test_gpu warprnnt ${CUDA_curand_LIBRARY})
-    SET_TARGET_PROPERTIES(test_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
+        cuda_add_executable(test_gpu tests/test_gpu.cu)
+        TARGET_LINK_LIBRARIES(test_gpu warprnnt ${CUDA_curand_LIBRARY})
+        SET_TARGET_PROPERTIES(test_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
+    endif()
 
 ELSE()
     MESSAGE(STATUS "Building shared library with no GPU support")
@@ -121,18 +168,19 @@ ELSE()
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O2")
     ENDIF()
 
-    ADD_LIBRARY(warprnnt SHARED src/rnnt_entrypoint.cpp)
+    ADD_LIBRARY(warprnnt ${WARPRNNT_SHARED} src/rnnt_entrypoint.cpp)
 
 ENDIF()
 
+if(BUILD_TESTS)
+    add_executable(test_cpu tests/test_cpu.cpp)
+    TARGET_LINK_LIBRARIES(test_cpu warprnnt)
+    SET_TARGET_PROPERTIES(test_cpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
 
-add_executable(test_cpu tests/test_cpu.cpp)
-TARGET_LINK_LIBRARIES(test_cpu warprnnt)
-SET_TARGET_PROPERTIES(test_cpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
-
-add_executable(test_time tests/test_time.cpp)
-TARGET_LINK_LIBRARIES(test_time warprnnt)
-SET_TARGET_PROPERTIES(test_time PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
+    add_executable(test_time tests/test_time.cpp)
+    TARGET_LINK_LIBRARIES(test_time warprnnt)
+    SET_TARGET_PROPERTIES(test_time PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
+endif()
 
 INSTALL(TARGETS warprnnt
         RUNTIME DESTINATION "bin"
