@@ -106,11 +106,11 @@ IF (WITH_GPU)
         TARGET_LINK_LIBRARIES(warprnnt ${CUDA_curand_LIBRARY})
     ENDIF()
 
-    cuda_add_executable(test_time_gpu tests/test_time.cu tests/random.cpp )
+    cuda_add_executable(test_time_gpu tests/test_time.cu)
     TARGET_LINK_LIBRARIES(test_time_gpu warprnnt ${CUDA_curand_LIBRARY})
     SET_TARGET_PROPERTIES(test_time_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
 
-    cuda_add_executable(test_gpu tests/test_gpu.cu tests/random.cpp )
+    cuda_add_executable(test_gpu tests/test_gpu.cu)
     TARGET_LINK_LIBRARIES(test_gpu warprnnt ${CUDA_curand_LIBRARY})
     SET_TARGET_PROPERTIES(test_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
 
@@ -126,11 +126,11 @@ ELSE()
 ENDIF()
 
 
-add_executable(test_cpu tests/test_cpu.cpp tests/random.cpp )
+add_executable(test_cpu tests/test_cpu.cpp)
 TARGET_LINK_LIBRARIES(test_cpu warprnnt)
 SET_TARGET_PROPERTIES(test_cpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
 
-add_executable(test_time tests/test_time.cpp tests/random.cpp )
+add_executable(test_time tests/test_time.cpp)
 TARGET_LINK_LIBRARIES(test_time warprnnt)
 SET_TARGET_PROPERTIES(test_time PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
 
