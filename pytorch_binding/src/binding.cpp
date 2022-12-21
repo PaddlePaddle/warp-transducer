@@ -4,18 +4,20 @@
 #include <torch/extension.h>
 #include "rnnt.h"
 
+#define WARPRNNT_ENABLE_GPU // for read code
+
 #ifdef WARPRNNT_ENABLE_GPU
-    #include "THC.h"
-    extern THCState* state;
+    #include "c10/cuda/CUDACachingAllocator.h"
 #endif
 
-int cpu_rnnt(torch::Tensor acts,
+int cpu_rnnt(torch::Tensor acts, //[B,T,U,D]
             torch::Tensor labels,
             torch::Tensor input_lengths,
             torch::Tensor label_lengths,
             torch::Tensor costs,
             torch::Tensor grads,
             int blank_label,
+            float fastemit_lambda,
             int num_threads) {
 
     int maxT = acts.size(0);
@@ -33,6 +35,7 @@ int cpu_rnnt(torch::Tensor acts,
     memset(&options, 0, sizeof(options));
     options.maxT = maxT;
     options.maxU = maxU;
+    options.fastemit_lambda = fastemit_lambda;
     options.blank_label = blank_label;
     options.batch_first = true;
     options.loc = RNNT_CPU;
@@ -46,7 +49,7 @@ int cpu_rnnt(torch::Tensor acts,
     switch (acts.type().scalarType()) {
       case torch::ScalarType::Float:
         {
-        get_workspace_size(maxT, maxU, minibatch_size,
+        get_rnnt_workspace_size(maxT, maxU, minibatch_size,
                            false, &cpu_size_bytes);
 
         float* cpu_workspace = (float*) new unsigned char[cpu_size_bytes];
@@ -61,7 +64,7 @@ int cpu_rnnt(torch::Tensor acts,
         }
       case torch::ScalarType::Double:
         {
-        get_workspace_size(maxT, maxU, minibatch_size,
+        get_rnnt_workspace_size(maxT, maxU, minibatch_size,
                            false, &cpu_size_bytes,
                            sizeof(double));
 
@@ -88,6 +91,7 @@ int gpu_rnnt(torch::Tensor acts,
             torch::Tensor costs,
             torch::Tensor grads,
             int blank_label,
+            float fastemit_lambda,
             int num_threads) {
 
     int minibatch_size = acts.size(0);
@@ -102,6 +106,7 @@ int gpu_rnnt(torch::Tensor acts,
     options.blank_label = blank_label;
     options.loc = RNNT_GPU;
     options.stream = at::cuda::getCurrentCUDAStream();
+    options.fastemit_lambda = fastemit_lambda;
     options.num_threads = num_threads;
 #if defined(RNNT_DISABLE_OMP) || defined(APPLE)
     // have to use at least one
@@ -112,12 +117,12 @@ int gpu_rnnt(torch::Tensor acts,
       case torch::ScalarType::Float:
         {
         size_t gpu_size_bytes;
-        get_workspace_size(maxT, maxU, minibatch_size,
+        get_rnnt_workspace_size(maxT, maxU, minibatch_size,
                            true, &gpu_size_bytes);
 
         cudaSetDevice(acts.get_device());
 
-        void* gpu_workspace = THCudaMalloc(state, gpu_size_bytes);
+        void* gpu_workspace = c10::cuda::CUDACachingAllocator::raw_alloc(gpu_size_bytes);
 
         compute_rnnt_loss(acts.data<float>(), grads.data<float>(),
                          labels.data<int>(), label_lengths.data<int>(),
@@ -125,18 +130,18 @@ int gpu_rnnt(torch::Tensor acts,
                          minibatch_size, costs.data<float>(),
                          gpu_workspace, options);
 
-        THCudaFree(state, gpu_workspace);
+        c10::cuda::CUDACachingAllocator::raw_delete(gpu_workspace);
         return 0;
         }
       case torch::ScalarType::Double:
         {
         size_t gpu_size_bytes;
-        get_workspace_size(maxT, maxU, minibatch_size,
+        get_rnnt_workspace_size(maxT, maxU, minibatch_size,
                            true, &gpu_size_bytes);
 
         cudaSetDevice(acts.get_device());
 
-        void* gpu_workspace = THCudaMalloc(state, gpu_size_bytes);
+        void* gpu_workspace = c10::cuda::CUDACachingAllocator::raw_alloc(gpu_size_bytes);
 
         compute_rnnt_loss_fp64(acts.data<double>(), grads.data<double>(),
                          labels.data<int>(), label_lengths.data<int>(),
@@ -144,7 +149,7 @@ int gpu_rnnt(torch::Tensor acts,
                          minibatch_size, costs.data<double>(),
                          gpu_workspace, options);
 
-        THCudaFree(state, gpu_workspace);
+        c10::cuda::CUDACachingAllocator::raw_delete(gpu_workspace);
         return 0;
         }
       default:

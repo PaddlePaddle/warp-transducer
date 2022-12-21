@@ -9,21 +9,22 @@ __all__ = ['rnnt_loss', 'RNNTLoss']
 
 class _RNNT(Function):
     @staticmethod
-    def forward(ctx, acts, labels, act_lens, label_lens, blank, reduction):
+    def forward(ctx, acts, labels, act_lens, label_lens, blank, reduction, fastemit_lambda):
         """
-        acts: Tensor of (batch x seqLength x labelLength x outputDim) containing output from network
-        labels: 2 dimensional Tensor containing all the targets of the batch with zero padded
-        act_lens: Tensor of size (batch) containing size of each output sequence from the network
-        label_lens: Tensor of (batch) containing label length of each example
+        acts: Tensor of (batch x seqLength x labelLength x outputDim) containing output from network,[B,Tmax,Umax,D]
+        labels: 2 dimensional Tensor containing all the targets of the batch with zero padded, [B,Umax]
+        act_lens: Tensor of size (batch) containing size of each output sequence from the network, [B]
+        label_lens: Tensor of (batch) containing label length of each example, [B]
+        fastemit_lambda: Regularization parameter for FastEmit (https://arxiv.org/pdf/2010.11148.pdf)
         """
         is_cuda = acts.is_cuda
 
         certify_inputs(acts, labels, act_lens, label_lens)
 
         loss_func = warp_rnnt.gpu_rnnt if is_cuda else warp_rnnt.cpu_rnnt
-        grads = torch.zeros_like(acts) if acts.requires_grad else torch.zeros(0).to(acts)
+        grads = torch.zeros_like(acts) if acts.requires_grad else torch.zeros(0).to(acts) #[B,T,U,D]
         minibatch_size = acts.size(0)
-        costs = torch.zeros(minibatch_size, dtype=acts.dtype)
+        costs = torch.zeros(minibatch_size, dtype=acts.dtype) #[B]
         loss_func(acts,
                   labels,
                   act_lens,
@@ -31,6 +32,7 @@ class _RNNT(Function):
                   costs,
                   grads,
                   blank,
+                  fastemit_lambda,
                   0)
 
         if reduction in ['sum', 'mean']:
@@ -47,10 +49,10 @@ class _RNNT(Function):
     @staticmethod
     def backward(ctx, grad_output):
         grad_output = grad_output.view(-1, 1, 1, 1).to(ctx.grads)
-        return ctx.grads.mul_(grad_output), None, None, None, None, None
+        return ctx.grads.mul_(grad_output), None, None, None, None, None, None
 
 
-def rnnt_loss(acts, labels, act_lens, label_lens, blank=0, reduction='mean'):
+def rnnt_loss(acts, labels, act_lens, label_lens, blank=0, reduction='mean', fastemit_lambda=0.001):
     """ RNN Transducer Loss
 
     Args:
@@ -63,11 +65,12 @@ def rnnt_loss(acts, labels, act_lens, label_lens, blank=0, reduction='mean'):
             'none' | 'mean' | 'sum'. 'none': no reduction will be applied, 
             'mean': the output losses will be divided by the target lengths and
             then the mean over the batch is taken. Default: 'mean'
+       fastemit_lambda: Regularization parameter for FastEmit (https://arxiv.org/pdf/2010.11148.pdf)
     """
     if not acts.is_cuda:
         acts = torch.nn.functional.log_softmax(acts, -1)
 
-    return _RNNT.apply(acts, labels, act_lens, label_lens, blank, reduction)
+    return _RNNT.apply(acts, labels, act_lens, label_lens, blank, reduction, fastemit_lambda)
 
 
 class RNNTLoss(Module):
@@ -79,25 +82,26 @@ class RNNTLoss(Module):
             'mean': the output losses will be divided by the target lengths and
             then the mean over the batch is taken. Default: 'mean'
     """
-    def __init__(self, blank=0, reduction='mean'):
+    def __init__(self, blank=0, fastemit_lambda=0.001, reduction='mean'):
         super(RNNTLoss, self).__init__()
         self.blank = blank
         self.reduction = reduction
+        self.fastemit_lambda = fastemit_lambda
         self.loss = _RNNT.apply
 
     def forward(self, acts, labels, act_lens, label_lens):
         """
-        acts: Tensor of (batch x seqLength x labelLength x outputDim) containing output from network
-        labels: 2 dimensional Tensor containing all the targets of the batch with zero padded
-        act_lens: Tensor of size (batch) containing size of each output sequence from the network
-        label_lens: Tensor of (batch) containing label length of each example
+        acts: Tensor of (batch x seqLength x labelLength x outputDim) containing output from network, logits, [B,Tmax,Umax,D]
+        labels: 2 dimensional Tensor containing all the targets of the batch with zero padded, [B,Umax]
+        act_lens: Tensor of size (batch) containing size of each output sequence from the network, [B]
+        label_lens: Tensor of (batch) containing label length of each example, [B]
         """
         if not acts.is_cuda:
             # NOTE manually done log_softmax for CPU version,
             # log_softmax is computed within GPU version.
             acts = torch.nn.functional.log_softmax(acts, -1)
 
-        return self.loss(acts, labels, act_lens, label_lens, self.blank, self.reduction)
+        return self.loss(acts, labels, act_lens, label_lens, self.blank, self.reduction, self.fastemit_lambda)
 
 
 def check_type(var, t, name):
