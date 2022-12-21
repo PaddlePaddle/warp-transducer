@@ -39,7 +39,7 @@ option(BUILD_SHARED "build warp-rnnt shared library."  ON)
 option(WITH_ROCM   "Compile PaddlePaddle with ROCM platform" OFF)
 
 if(WITH_ROCM)
-    add_definitions(-DWARPCTC_WITH_HIP)
+    add_definitions(-DWARPRNNT_WITH_HIP)
     include(hip)
 endif(WITH_ROCM)
 
@@ -148,7 +148,7 @@ IF (WITH_GPU OR WITH_ROCM)
         CUDA_ADD_LIBRARY(warprnnt ${WARPRNNT_SHARED} src/rnnt_entrypoint.cu)
     ELSE()
         HIP_ADD_LIBRARY(warprnnt ${WARPRNNT_SHARED} src/rnnt_entrypoint.cu)
-        TARGET_LINK_LIBRARIES(warpctc PUBLIC ${ROCM_HIPRTC_LIB})
+        TARGET_LINK_LIBRARIES(warprnnt PUBLIC ${ROCM_HIPRTC_LIB})
     ENDIF()
 
     IF (!Torch_FOUND)
