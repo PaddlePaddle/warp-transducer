@@ -59,7 +59,7 @@ else()
 endif()
 
 if(APPLE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O2")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O2")
     add_definitions(-DAPPLE)
 endif()
 
@@ -72,39 +72,47 @@ if (WITH_OMP)
 endif()
 
 
-IF(NOT (CUDA_VERSION GREATER 10.2))
+# need to be at least 30 or __shfl_down in reduce wont compile
+IF (CUDA_VERSION VERSION_LESS "11.0")
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_30,code=sm_30")
+ENDIF()
+
+# sm35 is deprecated after cuda 12.0
+IF (CUDA_VERSION VERSION_LESS "12.0")
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_35,code=sm_35")
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_50,code=sm_50")
 ENDIF()
 
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_50,code=sm_50")
 set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_52,code=sm_52")
-IF(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 5)
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -D_MWAITXINTRIN_H_INCLUDED -D_FORCE_INLINES")
-ENDIF()
 
-IF (CUDA_VERSION GREATER 7.6)
+IF (CUDA_VERSION VERSION_GREATER "7.6")
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_60,code=sm_60")
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_61,code=sm_61")
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_62,code=sm_62")
 ENDIF()
 
-IF (CUDA_VERSION GREATER 8.9)
+IF ((CUDA_VERSION VERSION_GREATER "9.0") OR (CUDA_VERSION VERSION_EQUAL "9.0"))
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_70,code=sm_70")
 ENDIF()
 
-IF (CUDA_VERSION GREATER 9.9)
+IF ((CUDA_VERSION VERSION_GREATER "10.0") OR (CUDA_VERSION VERSION_EQUAL "10.0"))
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_75,code=sm_75")
 ENDIF()
 
-IF (CUDA_VERSION GREATER 11.0)
+IF ((CUDA_VERSION VERSION_GREATER "11.0") OR (CUDA_VERSION VERSION_EQUAL "11.0"))
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_80,code=sm_80")
+ENDIF()
+
+IF ((CUDA_VERSION VERSION_GREATER "11.2") OR (CUDA_VERSION VERSION_EQUAL "11.2"))
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_86,code=sm_86")
 ENDIF()
 
+IF ((CUDA_VERSION VERSION_GREATER "11.8") OR (CUDA_VERSION VERSION_EQUAL "11.8"))
+    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_90,code=sm_90")
+ENDIF()
 
 if (NOT APPLE)
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --std=c++14")
+    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --std=c++11")
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS}")
 ENDIF()
 
@@ -125,33 +133,62 @@ ELSE()
 ENDIF()
 
 
-IF (WITH_GPU)
+IF (WITH_GPU OR WITH_ROCM)
     MESSAGE(STATUS "Building shared library with GPU support")
+
+    IF (WITH_GPU)
+        MESSAGE(STATUS "NVCC_ARCH_FLAGS" ${CUDA_NVCC_FLAGS})
+    ENDIF()
 
     if (WIN32)
         SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Xcompiler \"/wd 4068 /wd 4244 /wd 4267 /wd 4305 /wd 4819\"")
     endif()
 
-    CUDA_ADD_LIBRARY(warprnnt ${WARPRNNT_SHARED} src/rnnt_entrypoint.cu)
+    IF (WITH_GPU)
+        CUDA_ADD_LIBRARY(warprnnt ${WARPRNNT_SHARED} src/rnnt_entrypoint.cu)
+    ELSE()
+        HIP_ADD_LIBRARY(warprnnt ${WARPRNNT_SHARED} src/rnnt_entrypoint.cu)
+        TARGET_LINK_LIBRARIES(warpctc PUBLIC ${ROCM_HIPRTC_LIB})
+    ENDIF()
+
     IF (!Torch_FOUND)
-        TARGET_LINK_LIBRARIES(warprnnt ${CUDA_curand_LIBRARY})
+        MESSAGE(STATUS "Link rand library")
+
+        IF (WITH_GPU)
+            MESSAGE(STATUS "Link cuda rand library: ${CUDA_curand_LIBRARY}")
+            TARGET_LINK_LIBRARIES(warprnnt ${CUDA_curand_LIBRARY})
+        ELSE()
+            MESSAGE(STATUS "Link hip rand library: ${hiprand_LIBRARY_DIRS}")
+            TARGET_LINK_LIBRARIES(warprnnt ${hiprand_LIBRARY_DIRS}/libhiprand.so)
+        ENDIF()
     ENDIF()
 
     if(BUILD_TESTS)
-        cuda_add_executable(test_time_gpu tests/test_time.cu)
-        TARGET_LINK_LIBRARIES(test_time_gpu warprnnt ${CUDA_curand_LIBRARY})
-        SET_TARGET_PROPERTIES(test_time_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
+        MESSAGE(STATUS "Build tests")
+        IF (WITH_GPU)
+            cuda_add_executable(test_time_gpu tests/test_time.cu)
+            TARGET_LINK_LIBRARIES(test_time_gpu warprnnt ${CUDA_curand_LIBRARY})
+            SET_TARGET_PROPERTIES(test_time_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11")
 
-        cuda_add_executable(test_gpu tests/test_gpu.cu)
-        TARGET_LINK_LIBRARIES(test_gpu warprnnt ${CUDA_curand_LIBRARY})
-        SET_TARGET_PROPERTIES(test_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
+            cuda_add_executable(test_gpu tests/test_gpu.cu)
+            TARGET_LINK_LIBRARIES(test_gpu warprnnt ${CUDA_curand_LIBRARY})
+            SET_TARGET_PROPERTIES(test_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11")
+        ELSE()
+            hip_add_executable(test_time_gpu tests/test_time.cu)
+            TARGET_LINK_LIBRARIES(test_time_gpu warprnnt ${hiprand_LIBRARY_DIRS}/libhiprand.so)
+            SET_TARGET_PROPERTIES(test_time_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11")
+
+            hip_add_executable(test_gpu tests/test_gpu.cu)
+            TARGET_LINK_LIBRARIES(test_gpu warprnnt ${hiprand_LIBRARY_DIRS}/libhiprand.so)
+            SET_TARGET_PROPERTIES(test_gpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11")
+        ENDIF()
     endif()
 
 ELSE()
     MESSAGE(STATUS "Building shared library with no GPU support")
 
     if (NOT APPLE)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O2")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O2")
     ENDIF()
 
     ADD_LIBRARY(warprnnt ${WARPRNNT_SHARED} src/rnnt_entrypoint.cpp)
@@ -161,11 +198,11 @@ ENDIF()
 if(BUILD_TESTS)
     add_executable(test_cpu tests/test_cpu.cpp)
     TARGET_LINK_LIBRARIES(test_cpu warprnnt)
-    SET_TARGET_PROPERTIES(test_cpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
+    SET_TARGET_PROPERTIES(test_cpu PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11")
 
     add_executable(test_time tests/test_time.cpp)
     TARGET_LINK_LIBRARIES(test_time warprnnt)
-    SET_TARGET_PROPERTIES(test_time PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++14")
+    SET_TARGET_PROPERTIES(test_time PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11")
 endif()
 
 INSTALL(TARGETS warprnnt
