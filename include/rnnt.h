@@ -20,6 +20,16 @@
 
 #pragma once
 
+#ifdef _WIN32
+#ifdef warprnnt_EXPORTS
+#define API_REFERENCE extern "C" __declspec(dllexport)
+#else
+#define API_REFERENCE extern "C" __declspec(dllimport)
+#endif
+#else
+#define API_REFERENCE
+#endif
+
 #ifdef __cplusplus
 #include <cstddef>
 extern "C" {
@@ -43,13 +53,13 @@ typedef enum {
 
 /** Returns a single integer which specifies the API version of the warprnnt
  * library */
-int get_warprnnt_version();
+API_REFERENCE int get_warprnnt_version();
 
 /** Returns a string containing a description of status that was passed in
  *  \param[in] status identifies which string should be returned
  *  \return C style string containing the text description
  *  */
-const char* rnntGetStatusString(rnntStatus_t status);
+API_REFERENCE const char* rnntGetStatusString(rnntStatus_t status);
 
 typedef enum { RNNT_CPU = 0, RNNT_GPU = 1 } rnntComputeLocation;
 
@@ -123,7 +133,7 @@ struct rnntOptions {
  *  \return Status information
  *
  * */
-rnntStatus_t compute_rnnt_loss(const float* const activations,
+API_REFERENCE rnntStatus_t compute_rnnt_loss(const float* const activations,
                                float* gradients,
                                const int* const flat_labels,
                                const int* const label_lengths,
@@ -134,7 +144,7 @@ rnntStatus_t compute_rnnt_loss(const float* const activations,
                                void* workspace,
                                rnntOptions options);
 
-rnntStatus_t compute_rnnt_loss_fp64(const double* const activations,
+API_REFERENCE rnntStatus_t compute_rnnt_loss_fp64(const double* const activations,
                                     double* gradients,
                                     const int* const flat_labels,
                                     const int* const label_lengths,
@@ -155,7 +165,7 @@ rnntStatus_t compute_rnnt_loss_fp64(const double* const activations,
  *
  *  \return Status information
  **/
-rnntStatus_t get_rnnt_workspace_size(int maxT,
+API_REFERENCE rnntStatus_t get_rnnt_workspace_size(int maxT,
                                      int maxU,
                                      int minibatch,
                                      bool gpu,

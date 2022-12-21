@@ -8,14 +8,11 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 project(rnnt_release)
 
-IF (NOT APPLE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
-ENDIF()
-
-IF (APPLE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O2")
-    add_definitions(-DAPPLE)
-ENDIF()
+if(NOT CMAKE_BUILD_TYPE)
+  message(STATUS "No CMAKE_BUILD_TYPE given, default to Release")
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 
 include_directories(include)
 
@@ -62,10 +59,9 @@ else()
 endif()
 
 if(APPLE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O2")
     add_definitions(-DAPPLE)
 endif()
-
 
 if(NOT WITH_OMP)
     add_definitions(-DRNNT_DISABLE_OMP)
