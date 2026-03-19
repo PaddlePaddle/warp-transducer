@@ -52,8 +52,27 @@ endif()
 
 if(WIN32)
     set(CMAKE_STATIC_LIBRARY_PREFIX lib)
+    
+    # Common flags for all configurations
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
+    
+    # Debug flags
+    set(CMAKE_C_FLAGS_DEBUG   "${CMAKE_C_FLAGS_DEBUG} /MTd")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+    
+    # Release flags with optimizations
+    set(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE} /MT /O2 /Ob2 /DNDEBUG")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /O2 /Ob2 /DNDEBUG")
+    
+    # Force static runtime linkage
+    foreach(flag_var
+            CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE)
+        if(${flag_var} MATCHES "/MD")
+            string(REGEX REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
+        endif()
+    endforeach()
 else()
-    # Set c++ flags
+    # Set c++ flags for non-Windows
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -O2")
 endif()
@@ -63,12 +82,24 @@ if(APPLE)
     add_definitions(-DAPPLE)
 endif()
 
+# OpenMP support for different platforms
 if(NOT WITH_OMP)
     add_definitions(-DRNNT_DISABLE_OMP)
-endif()
-if (WITH_OMP)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Xcompiler -fopenmp")
+else()
+    if(WIN32)
+        # Windows uses MSVC's /openmp flag
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /openmp")
+        set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Xcompiler \"/openmp\"")
+    elseif(APPLE)
+        # macOS requires -Xpreprocessor for OpenMP
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xpreprocessor -fopenmp")
+        set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Xcompiler -Xpreprocessor -Xcompiler -fopenmp")
+        find_package(OpenMP REQUIRED)
+    else()
+        # Linux/Unix uses standard -fopenmp
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+        set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Xcompiler -fopenmp")
+    endif()
 endif()
 
 
@@ -111,10 +142,10 @@ IF ((CUDA_VERSION VERSION_GREATER "11.8") OR (CUDA_VERSION VERSION_EQUAL "11.8")
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode arch=compute_90,code=sm_90")
 ENDIF()
 
-if (NOT APPLE)
+# Set C++ standard for NVCC (skip for MSVC to avoid warnings)
+if(NOT APPLE AND NOT MSVC)
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --std=c++11")
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS}")
-ENDIF()
+endif()
 
 IF (APPLE)
     EXEC_PROGRAM(uname ARGS -v  OUTPUT_VARIABLE DARWIN_VERSION)
@@ -142,6 +173,16 @@ IF (WITH_GPU OR WITH_ROCM)
 
     if (WIN32)
         SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Xcompiler \"/wd 4068 /wd 4244 /wd 4267 /wd 4305 /wd 4819\"")
+    
+        # Pass CMake CUDA flags to NVCC
+        if(CMAKE_CUDA_FLAGS)
+            set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} ${CMAKE_CUDA_FLAGS}")
+            message(STATUS "Added CMAKE_CUDA_FLAGS to NVCC: ${CMAKE_CUDA_FLAGS}")
+        endif()
+        # Ensure OpenMP flags are passed to NVCC on Windows
+        if(WITH_OMP)
+            set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Xcompiler \"/openmp\"")
+        endif()
     endif()
 
     IF (WITH_GPU)
